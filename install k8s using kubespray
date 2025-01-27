@@ -1,0 +1,104 @@
+
+
+    Created by Vũ Phương Thanh, last modified on Jan 15, 2025
+
+1, Chuẩn bị các máy ubuntu cài kubespray, 1 máy master, 1 máy worker
+10.0.88.20	kubespray
+10.0.88.23	master
+10.0.88.24	worker
+1.1 Tạo ssh key trên máy kubespray rồi copy ssh key lên các máy master và worker
+
+sudo -i
+
+ssh-keygen -t rsa
+
+ssh-copy-id hvs@10.0.88.23
+
+ssh-copy-id hvs@10.0.88.24
+1.2 Kiểm tra lại các máy bắt buộc phải ra dns và ra ngoài internet
+1.3 Cho user thường vào group admin sudo không cần mật khẩu vào tất cả các node master và worker
+
+echo "hvs ALL=(ALL) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/hvs         # thay hvs bằng user hiện tại của máy
+1.4 Cài đặt git và python 3.12 trên máy kubespray 10.0.88.20
+
+sudo -i
+
+apt install git   #Cài git
+
+#Cài python3.12
+
+cd /root
+
+apt install build-essential zlib1g-dev libncurses5-dev libgdbm-dev libnss3-dev libssl-dev libreadline-dev libffi-dev libsqlite3-dev wget libbz2-dev
+
+wget https://www.python.org/ftp/python/3.12.0/Python-3.12.0.tgz
+
+tar -xf Python-3.12.0.tgz
+
+cd Python-3.12.*/
+
+./configure --enable-optimizations
+
+make -j 4
+
+make altinstall
+
+python3.12 --version
+
+
+2, Cài đặt kubespray trên máy kubespray 10.0.88.20
+
+#Đứng tại máy kubespray 10.0.88.20
+
+sudo -i
+
+cd /root
+
+git clone https://github.com/kubernetes-sigs/kubespray.git
+
+cd kubespray
+
+cp -rf inventory/sample inventory/mycluster
+
+vim inventory/mycluster/hosts.yaml
+
+#########nội dung file hosts.yaml################
+
+all:
+  hosts:
+    master01:
+      ansible_host: 10.0.88.23
+      ip: 10.0.88.23
+      access_ip: 10.0.88.23
+      ansible_user: hvs
+    worker01:
+      ansible_host: 10.0.88.24
+      ip: 10.0.88.24
+      access_ip: 10.0.88.24
+      ansible_user: hvs
+  children:
+    kube_control_plane:
+      hosts:
+        master01:
+    kube_node:
+      hosts:
+        worker01:
+    etcd:
+      hosts:
+        master01:
+    k8s_cluster:
+      children:
+        kube_control_plane:
+        kube_node:
+    calico_rr:
+      hosts: {}
+
+#################Lưu lại file hosts.yaml#############
+
+vim inventory/mycluster/group_vars/k8s_cluster/k8s-cluster.yml
+
+#Sửa calico => flannel
+
+pip3.12 install -r requirements.txt
+
+ansible-playbook -i inventory/mycluster/hosts.yaml  --become --become-user=root cluster.yml
